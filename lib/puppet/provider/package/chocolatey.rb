@@ -10,6 +10,26 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   has_feature :installable, :uninstallable, :upgradeable, :versionable, :install_options
 
 
+  def powershell(args)
+    args = args.join(' ')
+
+    #Powershell
+    powershell_exe = native_path("#{ENV['SYSTEMROOT']}\\sysnative\\WindowsPowershell\\v1.0\\powershell.exe")
+    powershell_args = " -NoProfile -NonInteractive -NoLogo -ExecutionPolicy unrestricted" 
+    powershell = " \"#{powershell_exe}\" #{powershell_args}" 
+
+    #Chocolatey
+    chocopath = native_path("#{ENV['SYSTEMDRIVE']}\\Chocolatey\\chocolateyInstall\\chocolatey.ps1")
+    choco_command = " -Command #{chocopath} #{args}"
+    
+    #Execute the command
+    system "cmd.exe /c \" #{powershell} #{choco_command} \"\""
+  end
+
+  def native_path(path)
+    path.gsub(File::SEPARATOR, File::ALT_SEPARATOR)
+  end
+
   def self.chocolatey_command
     chocopath = ENV['ChocolateyInstall'] || 'C:\Chocolatey'
 
@@ -23,25 +43,25 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
  end
 
   def install
+
     should = @resource.should(:ensure)
     case should
     when true, false, Symbol
       args = "install", @resource[:name][/\A\S*/], resource[:install_options]
     else
       # Add the package version
-      args = "install", @resource[:name][/\A\S*/], "-version", resource[:ensure], resource[:install_options]
+     args = "install", @resource[:name][/\A\S*/], "-version", resource[:ensure], resource[:install_options]
     end
 
     if @resource[:source]
       args << "-source" << resource[:source]
     end
-
-    chocolatey(*args)
+    powershell(args)
   end
 
   def uninstall
     args = "uninstall", @resource[:name][/\A\S*/]
-    chocolatey(*args)
+    powershell(args)
   end
 
   def update
@@ -51,7 +71,7 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
       args << "-source" << resource[:source]
     end
 
-    chocolatey(*args)
+    powershell(args)
   end
 
   # from puppet-dev mailing list
