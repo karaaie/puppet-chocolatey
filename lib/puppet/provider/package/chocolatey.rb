@@ -14,16 +14,21 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
     args = args.join(' ')
 
     #Powershell
+    #  http://msdn.microsoft.com/en-us/library/windows/desktop/aa384187%28v=vs.85%29.aspx
+    #  For 32-bit processes on 64-bit systems, %windir%\system32 folder
+    #  can only be accessed by specifying %windir%\sysnative folder.
+    #
+    #  Puppet Agent process currently always runs in 32 bit mode, so the following powershell seems appropriate
     powershell_exe = native_path("#{ENV['SYSTEMROOT']}\\sysnative\\WindowsPowershell\\v1.0\\powershell.exe")
     powershell_args = " -NoProfile -NonInteractive -NoLogo -ExecutionPolicy unrestricted" 
     powershell = " \"#{powershell_exe}\" #{powershell_args}" 
 
     #Chocolatey
-    chocopath = native_path("#{ENV['SYSTEMDRIVE']}\\Chocolatey\\chocolateyInstall\\chocolatey.ps1")
+    chocopath = native_path("#{ENV['ChocolateyInstall'] || 'C:\\Chocolatey' }\\chocolateyInstall\\chocolatey.ps1")
     choco_command = " -Command #{chocopath} #{args}"
     
     #Execute the command
-    system "cmd.exe /c \" #{powershell} #{choco_command} \"\""
+    system "cmd.exe /c  \"#{powershell} #{choco_command}\" \""
   end
 
   def native_path(path)
@@ -32,30 +37,33 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
 
   def self.chocolatey_command
     chocopath = ENV['ChocolateyInstall'] || 'C:\Chocolatey'
-
     chocopath + "\\chocolateyInstall\\chocolatey.cmd"
   end
 
+  #Is this required ?
   commands :chocolatey => chocolatey_command
 
  def print()
    notice("The value is: '${name}'")
  end
 
+  # This command potentially triggers chocolateyInstall.ps1
+  # Which in turn might depend on 64 bit modules (Such as IIS WebAdministration)
+  # Thus we're piping it di
   def install
-
     should = @resource.should(:ensure)
     case should
     when true, false, Symbol
       args = "install", @resource[:name][/\A\S*/], resource[:install_options]
     else
       # Add the package version
-     args = "install", @resource[:name][/\A\S*/], "-version", resource[:ensure], resource[:install_options]
+      args = "install", @resource[:name][/\A\S*/], "-version", resource[:ensure], resource[:install_options]
     end
 
     if @resource[:source]
       args << "-source" << resource[:source]
     end
+
     powershell(args)
   end
 
@@ -90,7 +98,7 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   end
 
   def self.listcmd
-    [command(:chocolatey), "list", "-lo"]
+    powershell("list -lo")
   end
 
   def self.instances
@@ -112,7 +120,8 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   end
 
   def latestcmd
-    [command(:chocolatey), ' version ' + @resource[:name][/\A\S*/] + ' | findstr /R "latest" | findstr /V "latestCompare" ']
+    powershell(" version #{@resource[:name][/\A\S*/]} | findstr /R 'latest' | findstr /V 'latestCompare' ")
+    #[command(:chocolatey), ' version ' + @resource[:name][/\A\S*/] + ' | findstr /R "latest" | findstr /V "latestCompare" ']
   end
 
   def latest
