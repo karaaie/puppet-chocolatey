@@ -9,47 +9,33 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
 
   has_feature :installable, :uninstallable, :upgradeable, :versionable, :install_options
 
+  def native_path(path)
+    path.gsub(File::SEPARATOR, File::ALT_SEPARATOR)
+  end
 
   def powershell(args)
     args = args.join(' ')
 
+    #Sysnative folder was introduced in Windows Vista, thus XP and 2003 should end up in the else-statement
+    #However since XP has reached EoL perhaps we can clean this up at some point.
+    if File.exists?("#{ENV['SYSTEMROOT']}\\sysnative\\WindowsPowershell\\v1.0\\powershell.exe")
+      powershell_exe = native_path("#{ENV['SYSTEMROOT']}\\sysnative\\WindowsPowershell\\v1.0\\powershell.exe")
+    else
+      powershell_exe = native_path"#{ENV['SYSTEMROOT']}\\system32\\WindowsPowershell\\v1.0\\powershell.exe"
+    end
+
     #Powershell
-    #  http://msdn.microsoft.com/en-us/library/windows/desktop/aa384187%28v=vs.85%29.aspx
-    #  For 32-bit processes on 64-bit systems, %windir%\system32 folder
-    #  can only be accessed by specifying %windir%\sysnative folder.
-    #
-    #  Puppet Agent process currently always runs in 32 bit mode, so the following powershell seems appropriate
-    powershell_exe = native_path("#{ENV['SYSTEMROOT']}\\sysnative\\WindowsPowershell\\v1.0\\powershell.exe")
-    powershell_args = " -NoProfile -NonInteractive -NoLogo -ExecutionPolicy unrestricted" 
+    powershell_args = " -NoProfile -NonInteractive -NoLogo -ExecutionPolicy bypass" 
     powershell = " \"#{powershell_exe}\" #{powershell_args}" 
 
     #Chocolatey
     chocopath = native_path("#{ENV['ChocolateyInstall'] || 'C:\\Chocolatey' }\\chocolateyInstall\\chocolatey.ps1")
     choco_command = " -Command #{chocopath} #{args}"
-    
+
     #Execute the command
-    system "cmd.exe /c  \"#{powershell} #{choco_command}\" \""
+    system "cmd.exe /c \" #{powershell} #{choco_command} \"\""
   end
 
-  def native_path(path)
-    path.gsub(File::SEPARATOR, File::ALT_SEPARATOR)
-  end
-
-  def self.chocolatey_command
-    chocopath = ENV['ChocolateyInstall'] || 'C:\Chocolatey'
-    chocopath + "\\chocolateyInstall\\chocolatey.cmd"
-  end
-
-  #Is this required ?
-  commands :chocolatey => chocolatey_command
-
- def print()
-   notice("The value is: '${name}'")
- end
-
-  # This command potentially triggers chocolateyInstall.ps1
-  # Which in turn might depend on 64 bit modules (Such as IIS WebAdministration)
-  # Thus we're piping it di
   def install
     should = @resource.should(:ensure)
     case should
@@ -63,7 +49,6 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
     if @resource[:source]
       args << "-source" << resource[:source]
     end
-
     powershell(args)
   end
 
@@ -111,7 +96,7 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
           if line.empty? or line.match(/Reading environment variables.*/); next; end
           values = line.split(' ')
           packages << new({ :name => values[0], :ensure => values[1], :provider => self.name })
-        end
+          end
       end
     rescue Puppet::ExecutionFailure
       return nil
@@ -120,8 +105,7 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   end
 
   def latestcmd
-    powershell(" version #{@resource[:name][/\A\S*/]} | findstr /R 'latest' | findstr /V 'latestCompare' ")
-    #[command(:chocolatey), ' version ' + @resource[:name][/\A\S*/] + ' | findstr /R "latest" | findstr /V "latestCompare" ']
+    powershell(['version', @resource[:name][/\A\S*/], '| findstr /R "latest" | findstr /V "latestCompare"'])
   end
 
   def latest
@@ -143,5 +127,4 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
     end
     packages
   end
-
 end

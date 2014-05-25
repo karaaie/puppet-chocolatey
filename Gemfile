@@ -39,7 +39,7 @@ gem "hiera", *location_for(ENV['HIERA_LOCATION'] || '~> 1.0')
 platforms :mswin, :mingw do
   gem "sys-admin", "~> 1.5.6", :require => false
   gem "win32-api", "~> 1.4.8", :require => false
-  gem "win32-dir", "~> 0.3.7", :require => false
+  gem "win32-dir", "~> 0.4.8", :require => false
   gem "win32-eventlog", "~> 0.5.3", :require => false
   gem "win32-process", "~> 0.6.5", :require => false
   gem "win32-security", "~> 0.1.4", :require => false
