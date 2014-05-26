@@ -36,6 +36,13 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
     system "cmd.exe /c \" #{powershell} #{choco_command} \"\""
   end
 
+  def self.chocolatey_command
+    chocopath = ENV['ChocolateyInstall'] || 'C:\Chocolatey'
+    chocopath + "\\chocolateyInstall\\chocolatey.cmd"
+  end
+
+  commands :chocolatey => chocolatey_command
+
   def install
     should = @resource.should(:ensure)
     case should
@@ -83,7 +90,7 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   end
 
   def self.listcmd
-    powershell("list -lo")
+    [command(:chocolatey), "list", "-lo"]
   end
 
   def self.instances
@@ -105,15 +112,14 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
   end
 
   def latestcmd
-    powershell(['version', @resource[:name][/\A\S*/], '| findstr /R "latest" | findstr /V "latestCompare"'])
+    [command(:chocolatey), ' version ' + @resource[:name][/\A\S*/] + ' | findstr /R "latest" | findstr /V "latestCompare" ']
   end
 
   def latest
     packages = []
 
     begin
-      output = execpipe(latestcmd()) do |process|
-
+      execpipe(latestcmd()) do |process|
         process.each_line do |line|
           line.chomp!
           if line.empty?; next; end
@@ -128,3 +134,4 @@ Puppet::Type.type(:package).provide(:chocolatey, :parent => Puppet::Provider::Pa
     packages
   end
 end
+
